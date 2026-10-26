@@ -1,0 +1,49 @@
+# Profile activated by the CronJob: --spring.profiles.active=camaro-duplicate
+# Every ${...} without a default must be provided per environment (Helm values / ConfigMap / Secret).
+
+spring:
+  main:
+    web-application-type: none
+  batch:
+    job:
+      enabled: false              # launched by CamaroDuplicateJobRunner, not Boot's auto-runner
+    jdbc:
+      initialize-schema: never    # BATCH_* tables managed like the rest of Vision's schema
+  # spring.datasource.* and spring.mail.* (host, port, username, password):
+  # reuse Vision's existing configuration and secrets, do not redefine them here.
+
+vision:
+  batch:
+    camaro-duplicate:
+      runner:
+        enabled: true
+      input-dir: ${CAMARO_DUPLICATE_INPUT_DIR}
+      archive-dir: ${CAMARO_DUPLICATE_ARCHIVE_DIR}
+      report-dir: ${CAMARO_DUPLICATE_REPORT_DIR}
+      chunk-size: 200
+      technical-skip-limit: 10
+      formats:
+        DAILY:
+          file-pattern: ${CAMARO_DUPLICATE_DAILY_PATTERN}     # TODO(spec) naming convention
+          delimiter: ";"                                      # TODO(spec)
+          encoding: UTF-8                                     # TODO(spec) ISO-8859-1?
+          lines-to-skip: 1                                    # TODO(spec) header present?
+          expected-columns: 2                                 # TODO(spec)
+          obsolete-id-column: 0                               # TODO(spec)
+          survivor-id-column: 1                               # TODO(spec)
+          identifier-pattern: "^[A-Za-z0-9]{1,32}$"           # TODO(spec) Camaro id format
+        MONTHLY:
+          file-pattern: ${CAMARO_DUPLICATE_MONTHLY_PATTERN}
+          delimiter: ";"
+          encoding: UTF-8
+          lines-to-skip: 1
+          expected-columns: 2
+          obsolete-id-column: 0
+          survivor-id-column: 1
+          identifier-pattern: "^[A-Za-z0-9]{1,32}$"
+      mail:
+        enabled: ${CAMARO_DUPLICATE_MAIL_ENABLED:true}
+        from: ${CAMARO_DUPLICATE_MAIL_FROM}
+        to: ${CAMARO_DUPLICATE_MAIL_TO}                      # comma-separated
+        cc: ${CAMARO_DUPLICATE_MAIL_CC:}
+        subject-prefix: "[VISION][${VISION_ENV}]"

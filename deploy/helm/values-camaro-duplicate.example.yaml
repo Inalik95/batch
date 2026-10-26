@@ -1,0 +1,36 @@
+# Block to add to each values-<env>.yaml (DEV, INT, QUAL1, QUAL2, QUAL3, PREPROD, PROD).
+# Every <...> is unknown today and must be confirmed per environment. Nothing here is a real value.
+
+envName: <DEV|INT|QUAL1|QUAL2|QUAL3|PREPROD|PROD>
+
+camaroDuplicate:
+  timeZone: Europe/Paris
+  activeDeadlineSeconds: <e.g. 3600>
+  schedules:
+    DAILY:
+      enabled: true
+      cron: "<daily schedule, after Camaro delivery time>"
+      suspend: false            # suspend: true in envs without Camaro feed
+    MONTHLY:
+      enabled: true
+      cron: "<monthly schedule>"
+  filePatterns:
+    DAILY: "<daily file glob>"
+    MONTHLY: "<monthly file glob>"
+  paths:
+    mountPath: <mount path>
+    input: <mountPath>/in
+    archive: <mountPath>/archive
+    report: <mountPath>/report
+  pvcName: <existing PVC where Camaro files land>
+  mail:
+    enabled: true               # false in DEV if no SMTP
+    from: <sender>
+    to: [<recipient>]
+    cc: []
+  envFrom:
+    - secretRef:
+        name: <existing Vision DB/SMTP secret>
+  resources:
+    requests: { cpu: 200m, memory: 512Mi }
+    limits:   { memory: 1Gi }
