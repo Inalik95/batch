@@ -26,15 +26,20 @@ import java.util.Map;
 @ConfigurationProperties(prefix = "vision.batch.camaro-duplicate")
 public class CamaroDuplicateProperties {
 
-    /** Directory where Camaro drops the files. */
-    @NotNull
+    /** Where input files come from: local directory or IBM COS bucket. */
+    @Valid
+    private Source source = new Source();
+
+    /** source.type=local only: directory where Camaro drops the files. */
     private Path inputDir;
 
-    /** Processed files are moved here when the job completes. */
-    @NotNull
+    /** source.type=local only: processed files are moved here when the job completes. */
     private Path archiveDir;
 
-    /** CSV reports are written here (kept for audit, also attached to the mail). */
+    /** source.type=s3 only: local scratch directory for downloaded files (emptyDir in Kubernetes). */
+    private Path workDir;
+
+    /** CSV reports are written here, then attached to the mail (and uploaded if source.s3.report-prefix is set). */
     @NotNull
     private Path reportDir;
 
@@ -55,8 +60,72 @@ public class CamaroDuplicateProperties {
     @Valid
     private Mail mail = new Mail();
 
+    public enum SourceType { LOCAL, S3 }
+
+    public static class Source {
+        @NotNull
+        private SourceType type = SourceType.LOCAL;
+        @Valid
+        private S3 s3 = new S3();
+
+        public SourceType getType() { return type; }
+        public void setType(SourceType type) { this.type = type; }
+        public S3 getS3() { return s3; }
+        public void setS3(S3 s3) { this.s3 = s3; }
+    }
+
+    /**
+     * IBM Cloud Object Storage through its S3-compatible API.
+     * Credentials are the HMAC keys of a COS service credential (created with "Include HMAC Credential").
+     * They must come from a Kubernetes Secret, never from this file.
+     */
+    public static class S3 {
+        /** e.g. https://s3.direct.eu-de.cloud-object-storage.appdomain.cloud (private/direct endpoint from the cluster). */
+        private java.net.URI endpoint;
+        /** COS location, e.g. eu-de. Used for request signing only. */
+        private String region;
+        private String bucket;
+        /** Prefix where Camaro drops files, e.g. "camaro/in/". Empty = bucket root. */
+        private String inputPrefix = "";
+        /** Prefix where handled files are moved, e.g. "camaro/archive/". Must differ from input-prefix. */
+        private String archivePrefix;
+        /** Prefix for re-delivered files. Defaults to archive-prefix. */
+        private String alreadyProcessedPrefix;
+        /** Optional: if set, CSV reports are uploaded there, e.g. "camaro/report/". */
+        private String reportPrefix;
+        /** HMAC access key id. If blank, the AWS default chain is used (AWS_ACCESS_KEY_ID env var...). */
+        private String accessKeyId;
+        private String secretAccessKey;
+        /** COS supports both; path-style avoids DNS issues with dotted bucket names. */
+        private boolean pathStyleAccess = true;
+        private java.time.Duration apiCallTimeout = java.time.Duration.ofMinutes(5);
+
+        public java.net.URI getEndpoint() { return endpoint; }
+        public void setEndpoint(java.net.URI endpoint) { this.endpoint = endpoint; }
+        public String getRegion() { return region; }
+        public void setRegion(String region) { this.region = region; }
+        public String getBucket() { return bucket; }
+        public void setBucket(String bucket) { this.bucket = bucket; }
+        public String getInputPrefix() { return inputPrefix; }
+        public void setInputPrefix(String inputPrefix) { this.inputPrefix = inputPrefix; }
+        public String getArchivePrefix() { return archivePrefix; }
+        public void setArchivePrefix(String archivePrefix) { this.archivePrefix = archivePrefix; }
+        public String getAlreadyProcessedPrefix() { return alreadyProcessedPrefix; }
+        public void setAlreadyProcessedPrefix(String alreadyProcessedPrefix) { this.alreadyProcessedPrefix = alreadyProcessedPrefix; }
+        public String getReportPrefix() { return reportPrefix; }
+        public void setReportPrefix(String reportPrefix) { this.reportPrefix = reportPrefix; }
+        public String getAccessKeyId() { return accessKeyId; }
+        public void setAccessKeyId(String accessKeyId) { this.accessKeyId = accessKeyId; }
+        public String getSecretAccessKey() { return secretAccessKey; }
+        public void setSecretAccessKey(String secretAccessKey) { this.secretAccessKey = secretAccessKey; }
+        public boolean isPathStyleAccess() { return pathStyleAccess; }
+        public void setPathStyleAccess(boolean pathStyleAccess) { this.pathStyleAccess = pathStyleAccess; }
+        public java.time.Duration getApiCallTimeout() { return apiCallTimeout; }
+        public void setApiCallTimeout(java.time.Duration apiCallTimeout) { this.apiCallTimeout = apiCallTimeout; }
+    }
+
     public static class FileFormat {
-        /** Glob used to find the file in inputDir, e.g. "FUSION_TIERS_J_*.csv". TODO(spec) */
+        /** Glob matched against the file name (local dir or last segment of the object key). TODO(spec) */
         @NotBlank
         private String filePattern;
         private String delimiter = ";";
@@ -125,6 +194,10 @@ public class CamaroDuplicateProperties {
         return format;
     }
 
+    public Source getSource() { return source; }
+    public void setSource(Source source) { this.source = source; }
+    public Path getWorkDir() { return workDir; }
+    public void setWorkDir(Path workDir) { this.workDir = workDir; }
     public Path getInputDir() { return inputDir; }
     public void setInputDir(Path inputDir) { this.inputDir = inputDir; }
     public Path getArchiveDir() { return archiveDir; }

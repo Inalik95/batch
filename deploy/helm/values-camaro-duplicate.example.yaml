@@ -14,15 +14,27 @@ camaroDuplicate:
     MONTHLY:
       enabled: true
       cron: "<monthly schedule>"
-  filePatterns:
+  filePatterns:                 # glob on the object name (last segment of the key)
     DAILY: "<daily file glob>"
     MONTHLY: "<monthly file glob>"
-  paths:
-    mountPath: <mount path>
-    input: <mountPath>/in
-    archive: <mountPath>/archive
-    report: <mountPath>/report
-  pvcName: <existing PVC where Camaro files land>
+
+  # IBM Cloud Object Storage
+  cos:
+    # Use the "direct" (or private) endpoint of the bucket's location from inside IKS/ROKS.
+    endpoint: https://s3.direct.<location>.cloud-object-storage.appdomain.cloud
+    region: <location, e.g. eu-de>
+    bucket: <bucket name per env>
+    inputPrefix: <e.g. camaro/in/>
+    archivePrefix: <e.g. camaro/archive/>     # must differ from inputPrefix
+    reportPrefix: <e.g. camaro/report/>       # "" to keep reports out of COS
+    # Existing Secret holding the HMAC keys of a COS service credential (role: Writer on the bucket).
+    # Created by Vision's usual mechanism (Vault / ESO / SealedSecret), never committed in clear.
+    hmacSecret:
+      name: <secret name>
+      accessKeyIdKey: access_key_id
+      secretAccessKeyKey: secret_access_key
+
+  scratchSizeLimit: 1Gi         # > largest monthly file + report
   mail:
     enabled: true               # false in DEV if no SMTP
     from: <sender>

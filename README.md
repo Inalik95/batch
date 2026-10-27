@@ -13,7 +13,8 @@ Run `mvn test` first. Tests are in `src/test`: two unit test classes and one H2 
 
 ```
 CronJob (DAILY | MONTHLY)
- └─ CamaroDuplicateJobRunner     find files (glob, oldest first), SHA-256, launch 1 job per file
+ └─ CamaroDuplicateJobRunner     InputFileSource.list(glob), oldest first; per file:
+                                 fetch (COS download) -> SHA-256 -> launch job -> release (delete local copy)
      └─ camaroDuplicateJob       params: fileType*, inputChecksum*, inputFile   (* identifying)
          ├─ preScanStep          tasklet, no DB write, re-runs on restart
          │                       -> ConflictRegistry (whole-file view)
@@ -23,8 +24,32 @@ CronJob (DAILY | MONTHLY)
          │    writer             CAMARO_DUPLICATE_RESULT rows, same tx as business update
          │    skipListener       TECHNICAL_ERROR row in REQUIRES_NEW
          └─ JobCompletionListener (always)
-              summary -> CSV (from result table) -> mail -> archive input (if completed)
+              summary -> CSV (from result table) -> upload CSV to COS -> mail
+              -> archive source object (if completed)
 ```
+
+## Input source: IBM Cloud Object Storage
+
+`vision.batch.camaro-duplicate.source.type` picks the source. Use `s3` in the cluster. `local` is the mounted-directory mode, kept for local runs and the tests.
+
+| | `s3` (IBM COS) | `local` |
+|---|---|---|
+| Class | `source/S3InputFileSource` | `source/LocalDirectoryInputFileSource` |
+| Discovery | objects directly under `input-prefix` whose name matches the glob; sub-prefixes ignored | files in `input-dir` matching the glob |
+| Read | downloaded to `work-dir` (`.part` + atomic move); the job reads the local copy | read in place |
+| Archive (COMPLETED) | copy to `archive-prefix`, then delete source; skipped if already gone | move to `archive-dir` |
+| Re-delivered file | moved to `<archive-prefix>/<name>.already-processed` | same, in `archive-dir` |
+| FAILED | object stays in `input-prefix`; next run re-downloads, same checksum ⇒ restart | file stays |
+| Report | uploaded to `report-prefix` if set (`S3ReportArchiver`) | stays in `report-dir` |
+
+Client notes (`config/InputSourceConfig`):
+- Uses AWS SDK v2 against the COS S3 endpoint, with path-style access.
+- Authenticates with the **HMAC keys** of a COS service credential, injected from a Kubernetes Secret.
+- Sets `requestChecksumCalculation(WHEN_REQUIRED)`. SDK 2.30+ otherwise sends CRC32 checksums that S3-compatible stores can reject.
+- From IKS/ROKS, use the bucket location's *direct* endpoint.
+- The credential needs the **Writer** role on the bucket: list, get, put, copy, delete.
+
+If Vision already has a COS client, or requires IAM API-key auth, replace the `camaroS3Client` bean. API-key auth needs `com.ibm.cos:ibm-cos-java-sdk`. `S3InputFileSource` only depends on `S3Client`.
 
 ## Guarantees built in
 
@@ -54,7 +79,7 @@ Process exit codes: `0` ok/partial · `1` failed · `3` DB done but report/mail 
    - delete, only with explicit sign-off
 2. **`ReportNotifier`**: declare a bean wrapping Vision's mail service to replace `MailReportNotifier`.
 3. **`CamaroFileReaderFactory`**: only if the monthly layout is structurally different, not just different columns.
-4. **`InputFileResolver`**: only if files arrive via an existing transfer component.
+4. **`InputFileSource`**: implement it for another transport (SFTP, another bucket layout...).
 
 ## Integration into Vision
 
@@ -77,5 +102,7 @@ Process exit codes: `0` ok/partial · `1` failed · `3` DB done but report/mail 
 | 5 | Portal: CSV handled by people, or API/flag? | CSV only |
 | 6 | No file on a scheduled run: alert? | exit 4 |
 | 7 | Same file re-delivered: alert? | moved aside, log warn |
-| 8 | Recipients, wording, schedules, paths, PVC, secrets per env | placeholders |
-| 9 | Retention of reports, archives, result rows | none implemented |
+| 8 | Recipients, wording, schedules, secrets per env | placeholders |
+| 9 | Retention of reports, archives, result rows | none implemented. On COS, a bucket lifecycle rule on `archive-prefix` / `report-prefix` is the simplest option |
+| 10 | COS per env: bucket, location/endpoint, prefixes, who writes `input-prefix` (Camaro directly or a transfer) | placeholders |
+| 11 | Auth: HMAC keys (implemented) or IAM API key / trusted profile | HMAC |

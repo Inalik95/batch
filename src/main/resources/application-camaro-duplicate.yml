@@ -17,9 +17,23 @@ vision:
     camaro-duplicate:
       runner:
         enabled: true
-      input-dir: ${CAMARO_DUPLICATE_INPUT_DIR}
-      archive-dir: ${CAMARO_DUPLICATE_ARCHIVE_DIR}
-      report-dir: ${CAMARO_DUPLICATE_REPORT_DIR}
+      source:
+        type: s3                  # s3 = IBM Cloud Object Storage | local = mounted directory
+        s3:
+          endpoint: ${CAMARO_COS_ENDPOINT}                 # e.g. https://s3.direct.<region>.cloud-object-storage.appdomain.cloud
+          region: ${CAMARO_COS_REGION}                     # e.g. eu-de
+          bucket: ${CAMARO_COS_BUCKET}
+          input-prefix: ${CAMARO_COS_INPUT_PREFIX:}        # TODO(infra) where Camaro drops the files
+          archive-prefix: ${CAMARO_COS_ARCHIVE_PREFIX}
+          report-prefix: ${CAMARO_COS_REPORT_PREFIX:}      # empty = reports not uploaded
+          access-key-id: ${CAMARO_COS_HMAC_ACCESS_KEY_ID}          # from Secret
+          secret-access-key: ${CAMARO_COS_HMAC_SECRET_ACCESS_KEY}  # from Secret
+          path-style-access: true
+      work-dir: ${CAMARO_DUPLICATE_WORK_DIR:/tmp/camaro-duplicate/work}
+      report-dir: ${CAMARO_DUPLICATE_REPORT_DIR:/tmp/camaro-duplicate/report}
+      # source.type=local only:
+      # input-dir: ${CAMARO_DUPLICATE_INPUT_DIR}
+      # archive-dir: ${CAMARO_DUPLICATE_ARCHIVE_DIR}
       chunk-size: 200
       technical-skip-limit: 10
       formats:

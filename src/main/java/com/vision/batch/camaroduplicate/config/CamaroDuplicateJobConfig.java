@@ -14,6 +14,8 @@ import com.vision.batch.camaroduplicate.process.DuplicateMergeProcessor;
 import com.vision.batch.camaroduplicate.process.DuplicateRecordValidator;
 import com.vision.batch.camaroduplicate.read.CamaroFileReaderFactory;
 import com.vision.batch.camaroduplicate.report.CsvReportGenerator;
+import com.vision.batch.camaroduplicate.report.ReportArchiver;
+import com.vision.batch.camaroduplicate.source.InputFileSource;
 import com.vision.batch.camaroduplicate.result.ProcessingResultRepository;
 import com.vision.batch.camaroduplicate.result.ProcessingResultWriter;
 import com.vision.batch.camaroduplicate.result.TechnicalErrorSkipListener;
@@ -57,7 +59,8 @@ public class CamaroDuplicateJobConfig {
     public Job camaroDuplicateJob(JobRepository jobRepository, Step camaroDuplicatePreScanStep,
                                   Step camaroDuplicateProcessStep, JobCompletionListener camaroDuplicateCompletionListener) {
         DefaultJobParametersValidator params = new DefaultJobParametersValidator(
-                new String[]{JobParams.FILE_TYPE, JobParams.INPUT_CHECKSUM, JobParams.INPUT_FILE}, new String[0]);
+                new String[]{JobParams.FILE_TYPE, JobParams.INPUT_CHECKSUM, JobParams.INPUT_FILE},
+                new String[]{JobParams.SOURCE_REF});
         return new JobBuilder(JobParams.JOB_NAME, jobRepository)
                 .validator(params)
                 .start(camaroDuplicatePreScanStep)
@@ -161,11 +164,14 @@ public class CamaroDuplicateJobConfig {
     public JobCompletionListener camaroDuplicateCompletionListener(ProcessingResultRepository repository,
                                                                    ObjectProvider<ReportNotifier> notifiers,
                                                                    ObjectProvider<JavaMailSender> mailSender,
+                                                                   InputFileSource camaroInputFileSource,
+                                                                   ReportArchiver camaroReportArchiver,
                                                                    CamaroDuplicateProperties props) {
         // A ReportNotifier bean (e.g. wrapping Vision's mail service) wins over the default mail one.
         ReportNotifier notifier = notifiers.getIfAvailable(
                 () -> new MailReportNotifier(mailSender.getObject(), props.getMail()));
         return new JobCompletionListener(repository,
-                new CsvReportGenerator(repository, props.getReportDir()), notifier, props.getArchiveDir());
+                new CsvReportGenerator(repository, props.getReportDir()), camaroReportArchiver,
+                notifier, camaroInputFileSource);
     }
 }

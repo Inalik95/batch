@@ -36,12 +36,34 @@ spec:
               env:
                 - name: VISION_ENV
                   value: {{ $.Values.envName | quote }}
-                - name: CAMARO_DUPLICATE_INPUT_DIR
-                  value: {{ $.Values.camaroDuplicate.paths.input | quote }}
-                - name: CAMARO_DUPLICATE_ARCHIVE_DIR
-                  value: {{ $.Values.camaroDuplicate.paths.archive | quote }}
+                # IBM Cloud Object Storage (S3 API)
+                - name: CAMARO_COS_ENDPOINT
+                  value: {{ $.Values.camaroDuplicate.cos.endpoint | quote }}
+                - name: CAMARO_COS_REGION
+                  value: {{ $.Values.camaroDuplicate.cos.region | quote }}
+                - name: CAMARO_COS_BUCKET
+                  value: {{ $.Values.camaroDuplicate.cos.bucket | quote }}
+                - name: CAMARO_COS_INPUT_PREFIX
+                  value: {{ $.Values.camaroDuplicate.cos.inputPrefix | quote }}
+                - name: CAMARO_COS_ARCHIVE_PREFIX
+                  value: {{ $.Values.camaroDuplicate.cos.archivePrefix | quote }}
+                - name: CAMARO_COS_REPORT_PREFIX
+                  value: {{ $.Values.camaroDuplicate.cos.reportPrefix | default "" | quote }}
+                - name: CAMARO_COS_HMAC_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ $.Values.camaroDuplicate.cos.hmacSecret.name }}
+                      key: {{ $.Values.camaroDuplicate.cos.hmacSecret.accessKeyIdKey }}
+                - name: CAMARO_COS_HMAC_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ $.Values.camaroDuplicate.cos.hmacSecret.name }}
+                      key: {{ $.Values.camaroDuplicate.cos.hmacSecret.secretAccessKeyKey }}
+                # Local scratch: downloaded file + CSV before upload/mail. Ephemeral on purpose.
+                - name: CAMARO_DUPLICATE_WORK_DIR
+                  value: /scratch/work
                 - name: CAMARO_DUPLICATE_REPORT_DIR
-                  value: {{ $.Values.camaroDuplicate.paths.report | quote }}
+                  value: /scratch/report
                 - name: CAMARO_DUPLICATE_DAILY_PATTERN
                   value: {{ $.Values.camaroDuplicate.filePatterns.DAILY | quote }}
                 - name: CAMARO_DUPLICATE_MONTHLY_PATTERN
@@ -60,11 +82,11 @@ spec:
               resources:
                 {{- toYaml $.Values.camaroDuplicate.resources | nindent 16 }}
               volumeMounts:
-                - name: camaro-data
-                  mountPath: {{ $.Values.camaroDuplicate.paths.mountPath }}
+                - name: scratch
+                  mountPath: /scratch
           volumes:
-            - name: camaro-data
-              persistentVolumeClaim:
-                claimName: {{ $.Values.camaroDuplicate.pvcName }}
+            - name: scratch
+              emptyDir:
+                sizeLimit: {{ $.Values.camaroDuplicate.scratchSizeLimit | default "1Gi" }}
 {{- end }}
 {{- end }}
